@@ -1,4 +1,3 @@
-// todo
 import "./style.css";
 
 const APP_NAME = "Ian's Geocoin";
