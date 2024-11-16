@@ -1,5 +1,6 @@
 // @deno-types="npm:@types/leaflet@^1.9.14"
-import leaflet from "leaflet";
+import leaflet, { LatLng } from "leaflet";
+import /*Board,*/ { Cell } from "./board.ts"
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -12,16 +13,11 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 
 const HOME = leaflet.latLng(36.98949379578401, -122.06277128548504);
-const HOMECELL: Cell = { i: 0, j: 0 };
+const HOMECELL: Cell = { i: 369894, j: -1220627 };
 const ZOOM = 18;
 const TILE_DEGREES = .0001;
 const REACH_TILES = 8;
 const CHANCE_PER_CELL = 0.1;
-
-interface Cell {
-  i: number;
-  j: number;
-}
 
 interface Cache {
   coins: Coin[];
@@ -43,11 +39,8 @@ const footer = app.querySelector<HTMLDivElement>("#footer")!;
 
 let coins: number = 0;
 
-function CellToLatLng(cell: Cell): Cell {
-  return {
-    i: cell.i * TILE_DEGREES + HOME.lat,
-    j: cell.j * TILE_DEGREES + HOME.lng,
-  };
+function CellToLatLng(cell: Cell): LatLng {
+  return new LatLng(cell.i * TILE_DEGREES, cell.j * TILE_DEGREES);
 }
 
 // function CellToOrderedPair(cell : Cell) : number[]{
@@ -115,10 +108,10 @@ playerMarker.addTo(map);
 
 function spawnCache(i: number, j: number) {
   // deno-lint-ignore prefer-const
-  let c: Cell = CellToLatLng({ i: i, j: j });
+  let coords : LatLng = CellToLatLng({ i: i, j: j });
 
   // Dot to represent cache
-  const rect = leaflet.circle(leaflet.latLng(c.i, c.j), { radius: 3 });
+  const rect = leaflet.circle(coords, { radius: 3 });
   rect.addTo(map);
 
   // Handle interactions with the cache
@@ -130,8 +123,8 @@ function spawnCache(i: number, j: number) {
     let coinsGenerated = Math.floor(
       luck([i, j, "initialValue"].toString()) * 5,
     );
-    for (let i = 0; i < coinsGenerated; i++) {
-      newCache.coins.push({ cell: { i: i, j: j }, serial: 0 });
+    for (let n = 0; n < coinsGenerated; n++) {
+      newCache.coins.push({ cell: { i: i, j: j }, serial: i });
     }
 
     // The popup offers a description and button
