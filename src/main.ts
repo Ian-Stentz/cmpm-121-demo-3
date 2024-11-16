@@ -51,6 +51,10 @@ function CellToLatLng(cell: Cell): LatLng {
 //   return (cellA.i == cellB.i && cellA.j == cellB.j);
 // }
 
+// function getCoinCode(coin : Coin) : string {
+//   return `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
+// }
+
 function ManhattanDistance(cellA: Cell, cellB: Cell): number {
   return Math.abs(cellA.i - cellB.i) + Math.abs(cellA.j - cellB.j);
 }

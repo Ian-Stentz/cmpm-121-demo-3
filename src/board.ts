@@ -3,7 +3,11 @@ import leaflet from "leaflet";
 export interface Cell {
     readonly i: number;
     readonly j: number;
-  }
+}
+  
+function ManhattanDistance(cellA: Cell, cellB: Cell): number {
+    return Math.abs(cellA.i - cellB.i) + Math.abs(cellA.j - cellB.j);
+}
   
 
 export class Board {
@@ -22,7 +26,9 @@ export class Board {
     private getCanonicalCell(cell: Cell): Cell {
         const { i, j } = cell;
         const key = [i, j].toString();
-        // ...
+        if(!this.knownCells.has(key)) {
+            this.knownCells.set(key, cell);
+        }
         return this.knownCells.get(key)!;
     }
 
@@ -42,7 +48,14 @@ export class Board {
     getCellsNearPoint(point: leaflet.LatLng): Cell[] {
         const resultCells: Cell[] = [];
         const originCell = this.getCellForPoint(point);
-        // ...
+        for (let i = -this.tileVisibilityRadius; i < this.tileVisibilityRadius; i++) {
+            for (let j = -this.tileVisibilityRadius; j < this.tileVisibilityRadius; j++) {
+                const currentCell : Cell = { i: originCell.i + i, j: originCell.j + j }
+                if (ManhattanDistance(originCell, currentCell) <= this.tileVisibilityRadius) {
+                    resultCells.push(currentCell);
+                }
+            }
+          }
         return resultCells;
     }
 }
