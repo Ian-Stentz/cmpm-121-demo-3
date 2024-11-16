@@ -34,14 +34,14 @@ export class Board {
 
     getCellForPoint(point: leaflet.LatLng): Cell {
         return this.getCanonicalCell({
-           i : point.lat / this.tileWidth, j : point.lng / this.tileWidth
+           i : Math.round(point.lat / this.tileWidth), j : Math.round(point.lng / this.tileWidth)
         });
     }
 
     getCellBounds(cell: Cell): leaflet.LatLngBounds {
-    	return new leaflet.LatLngBounds (
-            cell.i * this.tileWidth, cell.j * this.tileWidth,
-            (cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth
+    	return new leaflet.LatLngBounds ([
+            [cell.i * this.tileWidth, cell.j * this.tileWidth],
+            [(cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth]]
         )
     }
 
