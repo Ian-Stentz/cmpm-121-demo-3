@@ -1,6 +1,6 @@
 // @deno-types="npm:@types/leaflet@^1.9.14"
 import leaflet, { LatLng } from "leaflet";
-import { Board, Cell } from "./board.ts"
+import { Board, Cell } from "./board.ts";
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -62,7 +62,7 @@ function formatCacheString(cache : Cache) : string {
   }
   outString += "<ol>";
   return outString;
-};
+}
 
 function Collect(coin: Coin): Coin {
   inventory.coins.push(coin);
