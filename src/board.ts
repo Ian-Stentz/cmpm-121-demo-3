@@ -20,7 +20,7 @@ export class Board {
     constructor(tileWidth: number, tileVisibilityRadius: number) {
         this.tileWidth = tileWidth;
         this.tileVisibilityRadius = tileVisibilityRadius;
-        this.knownCells = new Map<string, Cell>;
+        this.knownCells = new Map<string, Cell>();
     }
 
     private getCanonicalCell(cell: Cell): Cell {
@@ -40,7 +40,8 @@ export class Board {
     getCellBounds(cell: Cell): leaflet.LatLngBounds {
     	return new leaflet.LatLngBounds ([
             [cell.i * this.tileWidth, cell.j * this.tileWidth],
-            [(cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth]]);
+            [(cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth]
+        ]);
     }
 
     getCellsNearPoint(point: leaflet.LatLng): Cell[] {
@@ -53,7 +54,7 @@ export class Board {
                     resultCells.push(currentCell);
                 }
             }
-          }
+        }
         return resultCells;
     }
 }
