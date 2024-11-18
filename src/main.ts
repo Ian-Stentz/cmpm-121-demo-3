@@ -12,14 +12,10 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
-const HOME = leaflet.latLng(36.98949379578401, -122.06277128548504);
-const ZOOM = 18;
-const TILE_DEGREES = .0001;
-const REACH_TILES = 8;
-const CHANCE_PER_CELL = 0.1;
-
 interface Cache {
   coins: Coin[];
+  toMomento(cache : Cache) : string;
+  fromMomento(momento : string) : Coin[];
 }
 
 interface Coin {
@@ -27,29 +23,55 @@ interface Coin {
   serial: number;
 }
 
+
+const HOME = leaflet.latLng(36.98949379578401, -122.06277128548504);
+const ZOOM = 18;
+const TILE_DEGREES = .0001;
+const REACH_TILES = 8;
+const CHANCE_PER_CELL = 0.1;
+
 const InventoryChangeEvent = new Event("inventory-changed");
 
 const APP_NAME = "Santa Cruz Geocoin";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const title = app.querySelector<HTMLDivElement>("#title")!;
-//const header = app.querySelector<HTMLDivElement>("#header")!;
+const header = app.querySelector<HTMLDivElement>("#header")!;
 const mapElem = app.querySelector<HTMLDivElement>("#map")!;
 const footer = app.querySelector<HTMLDivElement>("#footer")!;
 
-const inventory : Cache = {coins : []};
+document.title = APP_NAME;
+title.innerHTML = APP_NAME;
+
+const map = leaflet.map(mapElem, {
+  center: HOME,
+  zoom: ZOOM,
+  minZoom: ZOOM,
+  maxZoom: ZOOM,
+  zoomControl: false,
+  scrollWheelZoom: false,
+});
+
+let playerLocation : LatLng = HOME;
+const inventory : Cache = { coins : [], toMomento : cacheToMomento, fromMomento : cacheFromMomento };
 const board : Board = new Board(TILE_DEGREES, REACH_TILES);
 
-function CellToLatLng(cell: Cell): LatLng {
+const stateDependentGroup = leaflet.layerGroup().addTo(map);
+
+const homeMarker = leaflet.marker(HOME);
+homeMarker.bindTooltip("Where it all started");
+homeMarker.addTo(map);
+
+function cellToLatLng(cell: Cell): LatLng {
   return new LatLng(cell.i * TILE_DEGREES, cell.j * TILE_DEGREES);
 }
 
-// function CellToOrderedPair(cell : Cell) : number[]{
-//   return [cell.i, cell.j];
-// }
+function cacheToMomento(cache : Cache) {
+  return JSON.stringify(cache.coins);
+}
 
-// function CellEquals(cellA : Cell, cellB : Cell) : boolean{
-//   return (cellA.i == cellB.i && cellA.j == cellB.j);
-// }
+function cacheFromMomento(momento : string) : Coin[] {
+  return JSON.parse(momento);
+}
 
 function getCoinCode(coin : Coin) : string {
   return `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
@@ -64,13 +86,13 @@ function formatCacheString(cache : Cache) : string {
   return outString;
 }
 
-function Collect(coin: Coin): Coin {
+function collect(coin: Coin): Coin {
   inventory.coins.push(coin);
   app.dispatchEvent(InventoryChangeEvent);
   return coin;
 }
 
-function Deposit(): Coin | undefined {
+function deposit(): Coin | undefined {
   if (inventory.coins.length > 0) {
     const coin = inventory.coins.pop();
     app.dispatchEvent(InventoryChangeEvent);
@@ -80,26 +102,18 @@ function Deposit(): Coin | undefined {
   }
 }
 
-document.title = APP_NAME;
-title.innerHTML = APP_NAME;
-
-// function alertButFunct() {
-//   alert("you clicked the button");
-// }
-
-// const alertButton = document.createElement("button");
-// alertButton.innerHTML = "ALERT";
-// alertButton.addEventListener("click", alertButFunct);
-// header.append(alertButton);
-
-const map = leaflet.map(mapElem, {
-  center: HOME,
-  zoom: ZOOM,
-  minZoom: ZOOM - 2,
-  maxZoom: ZOOM + 2,
-  zoomControl: false,
-  scrollWheelZoom: false,
-});
+function initializeGrid(playerCell : leaflet.LatLng) {
+  stateDependentGroup.clearLayers();
+  const playerMarker = leaflet.marker(playerCell);
+  playerMarker.bindTooltip("Current Location");
+  playerMarker.addTo(stateDependentGroup);
+  map.panTo(playerCell);
+  for (const cell of board.getCellsNearPoint(playerCell)) {
+    if(luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL) {
+      spawnCache(cell.i, cell.j);
+    }
+  }
+}
 
 leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -109,24 +123,26 @@ leaflet
   })
   .addTo(map);
 
-const playerMarker = leaflet.marker(HOME);
-playerMarker.bindTooltip("Where it all started");
-playerMarker.addTo(map);
-
 function spawnCache(i: number, j: number) {
-  const coords : LatLng = CellToLatLng({ i: i, j: j });
+  const correspondingCell : Cell = { i: i, j: j };
+  const coords : LatLng = cellToLatLng(correspondingCell);
 
   // Dot to represent cache
-  const rect = leaflet.rectangle(board.getCellBounds({ i: i, j: j }));
-  rect.addTo(map);
+  const rect = leaflet.rectangle(board.getCellBounds(correspondingCell));
+  rect.addTo(stateDependentGroup);
 
-  const newCache: Cache = { coins: [] };
-  const coinsGenerated = Math.floor(
-    Math.ceil(luck([i, j, "initialValue"].toString()) * 5),
-  );
-  for (let n = 0; n < coinsGenerated; n++) {
-    //console.log({ cell : board.getCellForPoint(coords), serial: n })
-    newCache.coins.push({ cell : board.getCellForPoint(coords), serial: n });
+  const newCache: Cache = { coins: [], toMomento : cacheToMomento, fromMomento : cacheFromMomento };
+  const retrieveCache = board.loadCache(correspondingCell);
+  if(retrieveCache) {
+    newCache.coins = newCache.fromMomento(retrieveCache);
+  } else {
+    const coinsGenerated = Math.floor(
+      Math.ceil(luck([i, j, "initialValue"].toString()) * 5),
+    );
+    for (let n = 0; n < coinsGenerated; n++) {
+      //console.log({ cell : board.getCellForPoint(coords), serial: n })
+      newCache.coins.push({ cell : board.getCellForPoint(coords), serial: n });
+    }
   }
 
   // Handle interactions with the cache
@@ -146,9 +162,10 @@ function spawnCache(i: number, j: number) {
         // deno-lint-ignore prefer-const
         let shinyCoin: Coin | undefined = newCache.coins.pop();
         if (shinyCoin) {
-          Collect(shinyCoin);
+          collect(shinyCoin);
           popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
             formatCacheString(newCache);
+          board.saveCache(correspondingCell, newCache.toMomento(newCache));
         }
       });
     popupDiv
@@ -156,24 +173,38 @@ function spawnCache(i: number, j: number) {
       .addEventListener("click", () => {
         console.log("keepthechange");
         // deno-lint-ignore prefer-const
-        let shinyCoin: Coin | undefined = Deposit();
+        let shinyCoin: Coin | undefined = deposit();
         if (shinyCoin) {
           newCache.coins.push(shinyCoin);
           popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
             formatCacheString(newCache);
+          board.saveCache(correspondingCell, newCache.toMomento(newCache));
         }
       });
     return popupDiv;
   });
 }
 
-//spawn caches with 10% chance per tile if they are within 8 tiles' Manhattan Distance
-for (const cell of board.getCellsNearPoint(HOME)) {
-  if(luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL) {
-    //console.log(cell.i, cell.j);
-    spawnCache(cell.i, cell.j);
-  }
+function buttonMove(dir : Cell) : void {
+  playerLocation = new LatLng(playerLocation.lat + dir.i * TILE_DEGREES, playerLocation.lng + dir.j * TILE_DEGREES);
+  initializeGrid(playerLocation);
 }
+
+//TODO : Movement buttons added to the header;
+function createButton(dir : Cell, icon : string) {
+  const newButton = document.createElement("button");
+  newButton.addEventListener("click", () => {buttonMove(dir)});
+  newButton.innerHTML = icon;
+  header.append(newButton);
+}
+
+createButton({i: 1, j: 0}, "UP");
+createButton({i: 0, j: -1}, "LEFT");
+createButton({i: -1, j: 0}, "DOWN");
+createButton({i: 0, j: 1}, "RIGHT");
+
+
+initializeGrid(HOME);
 
 const footerInventory = document.createElement("div");
 footerInventory.innerHTML = `Coins: ${formatCacheString(inventory)}`;

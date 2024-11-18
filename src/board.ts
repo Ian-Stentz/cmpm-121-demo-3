@@ -16,11 +16,13 @@ export class Board {
     readonly tileVisibilityRadius: number;
 
     private readonly knownCells: Map<string, Cell>;
+    private readonly savedCaches: Map<string,string>;
 
     constructor(tileWidth: number, tileVisibilityRadius: number) {
         this.tileWidth = tileWidth;
         this.tileVisibilityRadius = tileVisibilityRadius;
         this.knownCells = new Map<string, Cell>();
+        this.savedCaches = new Map<string, string>();
     }
 
     private getCanonicalCell(cell: Cell): Cell {
@@ -56,5 +58,19 @@ export class Board {
             }
         }
         return resultCells;
+    }
+
+    saveCache(cell : Cell, cacheData : string) {
+        const key = [cell.i, cell.j].toString();
+        this.savedCaches.set(key, cacheData);
+    }
+
+    loadCache(cell : Cell) : string | undefined{
+        const key = [cell.i, cell.j].toString();
+        if(!this.savedCaches.has(key)) {
+            return undefined;
+        } else {
+            return this.savedCaches.get(key);
+        }
     }
 }
