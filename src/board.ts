@@ -1,76 +1,87 @@
 import leaflet from "leaflet";
-
+//linter being finnicky
 export interface Cell {
-    readonly i: number;
-    readonly j: number;
+  readonly i: number;
+  readonly j: number;
 }
-  
+
 function ManhattanDistance(cellA: Cell, cellB: Cell): number {
-    return Math.abs(cellA.i - cellB.i) + Math.abs(cellA.j - cellB.j);
+  return Math.abs(cellA.i - cellB.i) + Math.abs(cellA.j - cellB.j);
 }
-  
 
 export class Board {
+  readonly tileWidth: number;
+  readonly tileVisibilityRadius: number;
 
-    readonly tileWidth: number;
-    readonly tileVisibilityRadius: number;
+  private readonly knownCells: Map<string, Cell>;
+  private readonly savedCaches: Map<string, string>;
 
-    private readonly knownCells: Map<string, Cell>;
-    private readonly savedCaches: Map<string,string>;
+  constructor(tileWidth: number, tileVisibilityRadius: number) {
+    this.tileWidth = tileWidth;
+    this.tileVisibilityRadius = tileVisibilityRadius;
+    this.knownCells = new Map<string, Cell>();
+    this.savedCaches = new Map<string, string>();
+  }
 
-    constructor(tileWidth: number, tileVisibilityRadius: number) {
-        this.tileWidth = tileWidth;
-        this.tileVisibilityRadius = tileVisibilityRadius;
-        this.knownCells = new Map<string, Cell>();
-        this.savedCaches = new Map<string, string>();
+  private getCanonicalCell(cell: Cell): Cell {
+    const { i, j } = cell;
+    const key = [i, j].toString();
+    if (!this.knownCells.has(key)) {
+      this.knownCells.set(key, cell);
     }
+    return this.knownCells.get(key)!;
+  }
 
-    private getCanonicalCell(cell: Cell): Cell {
-        const { i, j } = cell;
-        const key = [i, j].toString();
-        if(!this.knownCells.has(key)) {
-            this.knownCells.set(key, cell);
+  getCellForPoint(point: leaflet.LatLng): Cell {
+    return this.getCanonicalCell({
+      i: Math.round(point.lat / this.tileWidth),
+      j: Math.round(point.lng / this.tileWidth),
+    });
+  }
+
+  getCellBounds(cell: Cell): leaflet.LatLngBounds {
+    return new leaflet.LatLngBounds([
+      [cell.i * this.tileWidth, cell.j * this.tileWidth],
+      [(cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth],
+    ]);
+  }
+
+  getCellsNearPoint(point: leaflet.LatLng): Cell[] {
+    const resultCells: Cell[] = [];
+    const originCell = this.getCellForPoint(point);
+    for (
+      let i = -this.tileVisibilityRadius;
+      i < this.tileVisibilityRadius;
+      i++
+    ) {
+      for (
+        let j = -this.tileVisibilityRadius;
+        j < this.tileVisibilityRadius;
+        j++
+      ) {
+        const currentCell: Cell = { i: originCell.i + i, j: originCell.j + j };
+        if (
+          ManhattanDistance(originCell, currentCell) <=
+            this.tileVisibilityRadius
+        ) {
+          resultCells.push(currentCell);
         }
-        return this.knownCells.get(key)!;
+      }
     }
+    return resultCells;
+  }
 
-    getCellForPoint(point: leaflet.LatLng): Cell {
-        return this.getCanonicalCell({i : Math.round(point.lat / this.tileWidth), 
-        j : Math.round(point.lng / this.tileWidth)});
-    }
+  saveCache(cell: Cell, cacheData: string) {
+    const key = [cell.i, cell.j].toString();
+    this.savedCaches.set(key, cacheData);
+  }
 
-    getCellBounds(cell: Cell): leaflet.LatLngBounds {
-    	return new leaflet.LatLngBounds ([
-            [cell.i * this.tileWidth, cell.j * this.tileWidth],
-            [(cell.i + 1) * this.tileWidth, (cell.j + 1) * this.tileWidth]
-        ]);
+  loadCache(cell: Cell): string | undefined {
+    const key = [cell.i, cell.j].toString();
+    if (!this.savedCaches.has(key)) {
+      return undefined;
+    } else {
+      return this.savedCaches.get(key);
     }
-
-    getCellsNearPoint(point: leaflet.LatLng): Cell[] {
-        const resultCells: Cell[] = [];
-        const originCell = this.getCellForPoint(point);
-        for (let i = -this.tileVisibilityRadius; i < this.tileVisibilityRadius; i++) {
-            for (let j = -this.tileVisibilityRadius; j < this.tileVisibilityRadius; j++) {
-                const currentCell : Cell = { i: originCell.i + i, j: originCell.j + j }
-                if (ManhattanDistance(originCell, currentCell) <= this.tileVisibilityRadius) {
-                    resultCells.push(currentCell);
-                }
-            }
-        }
-        return resultCells;
-    }
-
-    saveCache(cell : Cell, cacheData : string) {
-        const key = [cell.i, cell.j].toString();
-        this.savedCaches.set(key, cacheData);
-    }
-
-    loadCache(cell : Cell) : string | undefined{
-        const key = [cell.i, cell.j].toString();
-        if(!this.savedCaches.has(key)) {
-            return undefined;
-        } else {
-            return this.savedCaches.get(key);
-        }
-    }
+  }
 }

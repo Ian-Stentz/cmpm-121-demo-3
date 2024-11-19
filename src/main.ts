@@ -14,15 +14,14 @@ import luck from "./luck.ts";
 
 interface Cache {
   coins: Coin[];
-  toMomento(cache : Cache) : string;
-  fromMomento(momento : string) : Coin[];
+  toMomento(cache: Cache): string;
+  fromMomento(momento: string): Coin[];
 }
 
 interface Coin {
   cell: Cell;
   serial: number;
 }
-
 
 const HOME = leaflet.latLng(36.98949379578401, -122.06277128548504);
 const ZOOM = 18;
@@ -51,9 +50,13 @@ const map = leaflet.map(mapElem, {
   scrollWheelZoom: false,
 });
 
-let playerLocation : LatLng = HOME;
-const inventory : Cache = { coins : [], toMomento : cacheToMomento, fromMomento : cacheFromMomento };
-const board : Board = new Board(TILE_DEGREES, REACH_TILES);
+let playerLocation: LatLng = HOME;
+const inventory: Cache = {
+  coins: [],
+  toMomento: cacheToMomento,
+  fromMomento: cacheFromMomento,
+};
+const board: Board = new Board(TILE_DEGREES, REACH_TILES);
 
 const stateDependentGroup = leaflet.layerGroup().addTo(map);
 
@@ -65,27 +68,27 @@ function cellToLatLng(cell: Cell): LatLng {
   return new LatLng(cell.i * TILE_DEGREES, cell.j * TILE_DEGREES);
 }
 
-function cacheToMomento(cache : Cache) {
+function cacheToMomento(cache: Cache) {
   return JSON.stringify(cache.coins);
 }
 
-function cacheFromMomento(momento : string) : Coin[] {
+function cacheFromMomento(momento: string): Coin[] {
   return JSON.parse(momento);
 }
 
-function getCoinCode(coin : Coin) : string {
+function getCoinCode(coin: Coin): string {
   return `${coin.cell.i}:${coin.cell.j}#${coin.serial}`;
 }
 
-function formatCacheString(cache : Cache) : string {
-  let outString : string = "<ol>";
-  for(const coin of cache.coins) {
+function formatCacheString(cache: Cache): string {
+  let outString: string = "<ol>";
+  for (const coin of cache.coins) {
     outString += "<li>" + getCoinCode(coin) + "</li>";
   }
   outString += "<ol>";
   return outString;
 }
-
+//testing
 function collect(coin: Coin): Coin {
   inventory.coins.push(coin);
   app.dispatchEvent(InventoryChangeEvent);
@@ -102,14 +105,14 @@ function deposit(): Coin | undefined {
   }
 }
 
-function initializeGrid(playerCell : leaflet.LatLng) {
+function initializeGrid(playerCell: leaflet.LatLng) {
   stateDependentGroup.clearLayers();
   const playerMarker = leaflet.marker(playerCell);
   playerMarker.bindTooltip("Current Location");
   playerMarker.addTo(stateDependentGroup);
   map.panTo(playerCell);
   for (const cell of board.getCellsNearPoint(playerCell)) {
-    if(luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL) {
+    if (luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL) {
       spawnCache(cell.i, cell.j);
     }
   }
@@ -124,16 +127,20 @@ leaflet
   .addTo(map);
 
 function spawnCache(i: number, j: number) {
-  const correspondingCell : Cell = { i: i, j: j };
-  const coords : LatLng = cellToLatLng(correspondingCell);
+  const correspondingCell: Cell = { i: i, j: j };
+  const coords: LatLng = cellToLatLng(correspondingCell);
 
   // Dot to represent cache
   const rect = leaflet.rectangle(board.getCellBounds(correspondingCell));
   rect.addTo(stateDependentGroup);
 
-  const newCache: Cache = { coins: [], toMomento : cacheToMomento, fromMomento : cacheFromMomento };
+  const newCache: Cache = {
+    coins: [],
+    toMomento: cacheToMomento,
+    fromMomento: cacheFromMomento,
+  };
   const retrieveCache = board.loadCache(correspondingCell);
-  if(retrieveCache) {
+  if (retrieveCache) {
     newCache.coins = newCache.fromMomento(retrieveCache);
   } else {
     const coinsGenerated = Math.floor(
@@ -141,7 +148,7 @@ function spawnCache(i: number, j: number) {
     );
     for (let n = 0; n < coinsGenerated; n++) {
       //console.log({ cell : board.getCellForPoint(coords), serial: n })
-      newCache.coins.push({ cell : board.getCellForPoint(coords), serial: n });
+      newCache.coins.push({ cell: board.getCellForPoint(coords), serial: n });
     }
   }
 
@@ -150,7 +157,9 @@ function spawnCache(i: number, j: number) {
     // The popup offers a description and button
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-                <div>There is a cache here at "${i * TILE_DEGREES},${j * TILE_DEGREES}".\n Coins: <span id="value">${formatCacheString(newCache)}</span></div>
+                <div>There is a cache here at "${i * TILE_DEGREES},${
+      j * TILE_DEGREES
+    }".\n Coins: <span id="value">${formatCacheString(newCache)}</span></div>
                 <button id="take">take a coin</button>
                 <button id="give">give a coin</button>`;
 
@@ -185,24 +194,28 @@ function spawnCache(i: number, j: number) {
   });
 }
 
-function buttonMove(dir : Cell) : void {
-  playerLocation = new LatLng(playerLocation.lat + dir.i * TILE_DEGREES, playerLocation.lng + dir.j * TILE_DEGREES);
+function buttonMove(dir: Cell): void {
+  playerLocation = new LatLng(
+    playerLocation.lat + dir.i * TILE_DEGREES,
+    playerLocation.lng + dir.j * TILE_DEGREES,
+  );
   initializeGrid(playerLocation);
 }
 
 //TODO : Movement buttons added to the header;
-function createButton(dir : Cell, icon : string) {
+function createButton(dir: Cell, icon: string) {
   const newButton = document.createElement("button");
-  newButton.addEventListener("click", () => {buttonMove(dir)});
+  newButton.addEventListener("click", () => {
+    buttonMove(dir);
+  });
   newButton.innerHTML = icon;
   header.append(newButton);
 }
 
-createButton({i: 1, j: 0}, "UP");
-createButton({i: 0, j: -1}, "LEFT");
-createButton({i: -1, j: 0}, "DOWN");
-createButton({i: 0, j: 1}, "RIGHT");
-
+createButton({ i: 1, j: 0 }, "UP");
+createButton({ i: 0, j: -1 }, "LEFT");
+createButton({ i: -1, j: 0 }, "DOWN");
+createButton({ i: 0, j: 1 }, "RIGHT");
 
 initializeGrid(HOME);
 
