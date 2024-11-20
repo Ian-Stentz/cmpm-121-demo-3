@@ -103,6 +103,7 @@ export class Board {
     for (const myCell of Array.from(this.cellsToButtons.keys())) {
       if (stringList.indexOf(myCell) == -1) {
         this.cellsToButtons.get(myCell).remove();
+        this.cellsToButtons.delete(myCell);
       }
     }
   }
