@@ -30,6 +30,7 @@ const REACH_TILES = 8;
 const CHANCE_PER_CELL = 0.1;
 
 const InventoryChangeEvent = new Event("inventory-changed");
+const PlayerMovedEvent = new Event("player-moved");
 
 const APP_NAME = "Santa Cruz Geocoin";
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -50,12 +51,9 @@ const map = leaflet.map(mapElem, {
   scrollWheelZoom: false,
 });
 
+let playerMarker: leaflet.Marker | null;
 let playerLocation: LatLng = HOME;
-const inventory: Cache = {
-  coins: [],
-  toMomento: cacheToMomento,
-  fromMomento: cacheFromMomento,
-};
+let inventory: Cache;
 const board: Board = new Board(TILE_DEGREES, REACH_TILES);
 
 const stateDependentGroup = leaflet.layerGroup().addTo(map);
@@ -88,7 +86,7 @@ function formatCacheString(cache: Cache): string {
   outString += "<ol>";
   return outString;
 }
-//testing
+
 function collect(coin: Coin): Coin {
   inventory.coins.push(coin);
   app.dispatchEvent(InventoryChangeEvent);
@@ -107,15 +105,50 @@ function deposit(): Coin | undefined {
 
 function initializeGrid(playerCell: leaflet.LatLng) {
   stateDependentGroup.clearLayers();
-  const playerMarker = leaflet.marker(playerCell);
+  movePlayer(playerCell);
+}
+
+//TODO : New movement paradigm that only clears caches that leave the map & the player marker, and only spawns in newly visible caches & the player marker
+function movePlayer(newLocation: leaflet.LatLng) {
+  if (playerMarker) {
+    playerMarker.remove();
+  }
+  playerMarker = leaflet.marker(newLocation);
   playerMarker.bindTooltip("Current Location");
   playerMarker.addTo(stateDependentGroup);
-  map.panTo(playerCell);
-  for (const cell of board.getCellsNearPoint(playerCell)) {
-    if (luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL) {
+  map.panTo(newLocation);
+  board.printCellsToButtons();
+  const cellsNearPlayer: Cell[] = board.getCellsNearPoint(newLocation);
+  console.log(cellsNearPlayer);
+  board.removeButtonsOoR(cellsNearPlayer);
+  for (const cell of cellsNearPlayer) {
+    if (
+      luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL &&
+      !board.cellhasButton(cell)
+    ) {
       spawnCache(cell.i, cell.j);
     }
   }
+  app.dispatchEvent(PlayerMovedEvent);
+}
+
+//TODO : Draw Polyline whenever a "player-moved" event is dispatched
+app.addEventListener("player-move", () => {
+});
+
+function loadInventory() {
+  const loadedInventory = board.loadInventory();
+  if (loadedInventory) {
+    console.log(loadedInventory);
+    inventory = JSON.parse(loadedInventory);
+  } else {
+    inventory = {
+      coins: [],
+      toMomento: cacheToMomento,
+      fromMomento: cacheFromMomento,
+    };
+  }
+  app.dispatchEvent(InventoryChangeEvent);
 }
 
 leaflet
@@ -133,6 +166,7 @@ function spawnCache(i: number, j: number) {
   // Dot to represent cache
   const rect = leaflet.rectangle(board.getCellBounds(correspondingCell));
   rect.addTo(stateDependentGroup);
+  board.addCellButton(correspondingCell, rect);
 
   const newCache: Cache = {
     coins: [],
@@ -147,7 +181,6 @@ function spawnCache(i: number, j: number) {
       Math.ceil(luck([i, j, "initialValue"].toString()) * 5),
     );
     for (let n = 0; n < coinsGenerated; n++) {
-      //console.log({ cell : board.getCellForPoint(coords), serial: n })
       newCache.coins.push({ cell: board.getCellForPoint(coords), serial: n });
     }
   }
@@ -167,43 +200,42 @@ function spawnCache(i: number, j: number) {
     popupDiv
       .querySelector<HTMLButtonElement>("#take")!
       .addEventListener("click", () => {
-        console.log("yoink");
-        // deno-lint-ignore prefer-const
-        let shinyCoin: Coin | undefined = newCache.coins.pop();
+        const shinyCoin: Coin | undefined = newCache.coins.pop();
         if (shinyCoin) {
           collect(shinyCoin);
           popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
             formatCacheString(newCache);
           board.saveCache(correspondingCell, newCache.toMomento(newCache));
+          board.saveInventory(JSON.stringify(inventory));
         }
       });
     popupDiv
       .querySelector<HTMLButtonElement>("#give")!
       .addEventListener("click", () => {
-        console.log("keepthechange");
-        // deno-lint-ignore prefer-const
-        let shinyCoin: Coin | undefined = deposit();
+        const shinyCoin: Coin | undefined = deposit();
         if (shinyCoin) {
           newCache.coins.push(shinyCoin);
           popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
             formatCacheString(newCache);
           board.saveCache(correspondingCell, newCache.toMomento(newCache));
+          board.saveInventory(JSON.stringify(inventory));
         }
       });
     return popupDiv;
   });
 }
 
+//TODO : Coin Clicks pan camera to those locations
+
 function buttonMove(dir: Cell): void {
   playerLocation = new LatLng(
     playerLocation.lat + dir.i * TILE_DEGREES,
     playerLocation.lng + dir.j * TILE_DEGREES,
   );
-  initializeGrid(playerLocation);
+  movePlayer(playerLocation);
 }
 
-//TODO : Movement buttons added to the header;
-function createButton(dir: Cell, icon: string) {
+function createMoveButton(dir: Cell, icon: string) {
   const newButton = document.createElement("button");
   newButton.addEventListener("click", () => {
     buttonMove(dir);
@@ -212,16 +244,33 @@ function createButton(dir: Cell, icon: string) {
   header.append(newButton);
 }
 
-createButton({ i: 1, j: 0 }, "UP");
-createButton({ i: 0, j: -1 }, "LEFT");
-createButton({ i: -1, j: 0 }, "DOWN");
-createButton({ i: 0, j: 1 }, "RIGHT");
+//TODO : Create geolocator button, moves player when player leaves bounds of current cell
 
-initializeGrid(HOME);
+createMoveButton({ i: 1, j: 0 }, "UP");
+createMoveButton({ i: 0, j: -1 }, "LEFT");
+createMoveButton({ i: -1, j: 0 }, "DOWN");
+createMoveButton({ i: 0, j: 1 }, "RIGHT");
+
+const clearButton = document.createElement("button");
+clearButton.addEventListener("click", () => {
+  const answer: string | null = prompt(
+    "Do you really want to clear data? Type YES to confirm: ",
+  );
+  if (answer && answer.toLowerCase().trim() == "yes") {
+    board.clearPersistentState();
+    initializeGrid(playerLocation);
+    loadInventory();
+  }
+});
+clearButton.innerHTML = "🚮";
+header.append(clearButton);
 
 const footerInventory = document.createElement("div");
-footerInventory.innerHTML = `Coins: ${formatCacheString(inventory)}`;
 app.addEventListener("inventory-changed", () => {
   footerInventory.innerHTML = `Coins: ${formatCacheString(inventory)}`;
 });
 footer.append(footerInventory);
+
+loadInventory();
+
+initializeGrid(HOME);
