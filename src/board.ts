@@ -78,9 +78,9 @@ export class Board {
     return resultCells;
   }
 
-  printCellsToButtons() {
-    console.log(this.cellsToButtons);
-  }
+  //   printCellsToButtons() {
+  //     console.log(this.cellsToButtons);
+  //   }
 
   addCellButton(cell: Cell, button: leaflet.Rectangle) {
     const { i, j } = cell;
@@ -137,6 +137,8 @@ export class Board {
   }
 
   clearPersistentState() {
+    this.knownCells.clear();
+    this.cellsToButtons.clear();
     localStore.clear();
   }
 }
