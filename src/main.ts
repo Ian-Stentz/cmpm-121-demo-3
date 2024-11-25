@@ -1,6 +1,10 @@
 // @deno-types="npm:@types/leaflet@^1.9.14"
-import leaflet, { LatLng, Polyline } from "leaflet";
-import { Board, Cell } from "./board.ts";
+import leaflet, { LatLng } from "leaflet";
+
+// Helpers
+import { Cell, Coin, Cache } from "./interfaces.ts";
+import { Board } from "./board.ts";
+import { Panmode, MapManager } from "./mapManager.ts";
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -12,21 +16,13 @@ import "./leafletWorkaround.ts";
 // Deterministic random number generator
 import luck from "./luck.ts";
 
-interface Cache {
-  coins: Coin[];
-  toMomento(cache: Cache): string;
-  fromMomento(momento: string): Coin[];
-}
-
-interface Coin {
-  cell: Cell;
-  serial: number;
-}
-
-enum Panmode {
-  playerLocation,
-  focused,
-}
+//TODO : move to map manager
+const APP_NAME = "Santa Cruz Geocoin";
+const app = document.querySelector<HTMLDivElement>("#app")!;
+const title = app.querySelector<HTMLDivElement>("#title")!;
+const header = app.querySelector<HTMLDivElement>("#header")!;
+const mapElem = app.querySelector<HTMLDivElement>("#map")!;
+const footer = app.querySelector<HTMLDivElement>("#footer")!;
 
 const HOME = leaflet.latLng(36.98949379578401, -122.06277128548504);
 const ZOOM = 18;
@@ -37,46 +33,22 @@ const CHANCE_PER_CELL = 0.1;
 const InventoryChangeEvent = new Event("inventory-changed");
 const PlayerMovedEvent = new Event("player-moved");
 
-const APP_NAME = "Santa Cruz Geocoin";
-const app = document.querySelector<HTMLDivElement>("#app")!;
-const title = app.querySelector<HTMLDivElement>("#title")!;
-const header = app.querySelector<HTMLDivElement>("#header")!;
-const mapElem = app.querySelector<HTMLDivElement>("#map")!;
-const footer = app.querySelector<HTMLDivElement>("#footer")!;
+const mapManager = new MapManager(mapElem, HOME, ZOOM, TILE_DEGREES);
 
 document.title = APP_NAME;
 title.innerHTML = APP_NAME;
 
-const map = leaflet.map(mapElem, {
-  center: HOME,
-  zoom: ZOOM,
-  minZoom: ZOOM,
-  maxZoom: ZOOM,
-  zoomControl: false,
-  scrollWheelZoom: false,
-  closePopupOnClick: true,
-});
-
-let playerMarker: leaflet.Marker | null;
+//TODO : move to map manager
 let playerLocation: LatLng = HOME;
 const playerPath: LatLng[] = new Array<LatLng>();
-let pathPolyline: Polyline | null;
 let inventory: Cache = {
   coins: [],
   toMomento: cacheToMomento,
   fromMomento: cacheFromMomento,
 };
 const board: Board = new Board(TILE_DEGREES, REACH_TILES);
-let panmode: Panmode = Panmode.playerLocation;
 let geoWatch: boolean = false;
 let geoID: number;
-
-const stateDependentGroup = leaflet.layerGroup().addTo(map);
-
-const homeMarker = leaflet.marker(HOME);
-homeMarker.options.opacity = 0.7;
-homeMarker.bindTooltip("Where it all started");
-homeMarker.addTo(map);
 
 function cellToLatLng(cell: Cell): LatLng {
   return new LatLng(cell.i * TILE_DEGREES, cell.j * TILE_DEGREES);
@@ -95,20 +67,8 @@ function getCoinCode(coin: Coin): string {
 }
 
 function panCoin(coin: Coin) {
-  panmode = Panmode.focused;
-  const { i, j } = coin.cell;
-  map.panTo(new LatLng(i * TILE_DEGREES, j * TILE_DEGREES));
+  mapManager.panTo(cellToLatLng(coin.cell), Panmode.focused);
 }
-
-// function formatCacheString(cache: Cache): string {
-//   let outString: string = "";
-//   for (const coin of cache.coins) {
-//     document.createElement("button").stri
-//     outString += `<a onclick="panCoin(${coin}) href="#">${getCoinCode(coin)}</a><br>`;
-//   }
-//   outString += "";
-//   return outString;
-// }
 
 function addCacheList(
   element: HTMLElement,
@@ -170,31 +130,26 @@ function deposit(): Coin | undefined {
   }
 }
 
-function initializeGrid(playerCell: leaflet.LatLng) {
-  stateDependentGroup.clearLayers();
+//TODO : MapManager
+function resetGrid(playerCell: leaflet.LatLng) {
+  mapManager.initialStateMap();
   movePlayer(playerCell);
 }
 
-//TODO : New movement paradigm that only clears caches that leave the map & the player marker, and only spawns in newly visible caches & the player marker
+//TODO : MapManager
 function movePlayer(newLocation: leaflet.LatLng) {
   playerLocation = newLocation;
-  if (playerMarker) {
-    playerMarker.remove();
-  }
-  playerMarker = leaflet.marker(newLocation);
-  playerMarker.bindTooltip("Current Location");
-  playerMarker.addTo(stateDependentGroup);
-  if (panmode == Panmode.playerLocation) {
-    map.panTo(newLocation);
-  }
+  mapManager.movePlayerMarker(newLocation);
   const cellsNearPlayer: Cell[] = board.getCellsNearPoint(newLocation);
-  board.removeButtonsOoR(cellsNearPlayer);
+  for (const button of board.removeButtonsOoR(cellsNearPlayer)) {
+    mapManager.removeRect(button);
+  }
   for (const cell of cellsNearPlayer) {
     if (
       luck([cell.i, cell.j].toString()) < CHANCE_PER_CELL &&
       !board.cellhasButton(cell)
     ) {
-      spawnCache(cell.i, cell.j);
+      spawnCache(cell);
     }
   }
   app.dispatchEvent(PlayerMovedEvent);
@@ -202,13 +157,8 @@ function movePlayer(newLocation: leaflet.LatLng) {
 
 //TODO : Draw Polyline whenever a "player-moved" event is dispatched
 app.addEventListener("player-moved", () => {
-  if (pathPolyline) {
-    pathPolyline.remove();
-  }
   playerPath.push(playerLocation);
-  pathPolyline = leaflet.polyline(playerPath);
-  pathPolyline.options.color = "#cc4eb3";
-  pathPolyline.addTo(stateDependentGroup);
+  mapManager.drawPolyline(playerPath);
 });
 
 function loadInventory() {
@@ -225,29 +175,17 @@ function loadInventory() {
   app.dispatchEvent(InventoryChangeEvent);
 }
 
-leaflet
-  .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: ZOOM,
-    attribution:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  })
-  .addTo(map);
-
-function spawnCache(i: number, j: number) {
-  const correspondingCell: Cell = { i: i, j: j };
-  const coords: LatLng = cellToLatLng(correspondingCell);
-
-  // Dot to represent cache
-  const rect = leaflet.rectangle(board.getCellBounds(correspondingCell));
-  rect.addTo(stateDependentGroup);
-  board.addCellButton(correspondingCell, rect);
-
+function spawnCache(cell : Cell) {
+  const {i, j} = cell;
+  const coords: LatLng = cellToLatLng(cell);
+  const retrieveCache = board.loadCache(cell);
+  
   const newCache: Cache = {
     coins: [],
     toMomento: cacheToMomento,
     fromMomento: cacheFromMomento,
   };
-  const retrieveCache = board.loadCache(correspondingCell);
+
   if (retrieveCache) {
     newCache.coins = newCache.fromMomento(retrieveCache);
   } else {
@@ -259,8 +197,7 @@ function spawnCache(i: number, j: number) {
     }
   }
 
-  // Handle interactions with the cache
-  rect.bindPopup(() => {
+  const rect = mapManager.addRect(board.getCellBounds(cell), () => {
     // The popup offers a description and button
     const popupDiv = document.createElement("div");
 
@@ -274,7 +211,7 @@ function spawnCache(i: number, j: number) {
       popupDiv.querySelector<HTMLSpanElement>("#value")!,
       newCache,
       true,
-      correspondingCell,
+      cell,
     );
     popupDiv
       .querySelector<HTMLButtonElement>("#give")!
@@ -287,17 +224,16 @@ function spawnCache(i: number, j: number) {
             popupDiv.querySelector<HTMLSpanElement>("#value")!,
             newCache,
             true,
-            correspondingCell,
+            cell,
           );
-          board.saveCache(correspondingCell, newCache.toMomento(newCache));
+          board.saveCache(cell, newCache.toMomento(newCache));
           board.saveInventory(JSON.stringify(inventory));
         }
       });
     return popupDiv;
   });
+  board.addCellButton(cell, rect);
 }
-
-//TODO : Coin Clicks pan camera to those locations
 
 function buttonMove(dir: Cell): void {
   movePlayer(
@@ -352,7 +288,7 @@ clearButton.addEventListener("click", () => {
   );
   if (answer && answer.toLowerCase().trim() == "yes") {
     board.clearPersistentState();
-    initializeGrid(playerLocation);
+    resetGrid(playerLocation);
     loadInventory();
   }
 });
@@ -362,8 +298,7 @@ header.append(clearButton);
 const recenterButton = document.createElement("button");
 recenterButton.innerHTML = ">📍";
 recenterButton.addEventListener("click", () => {
-  panmode = Panmode.playerLocation;
-  map.panTo(playerLocation);
+  mapManager.panTo(playerLocation, Panmode.playerLocation);
 });
 header.append(recenterButton);
 
@@ -380,4 +315,4 @@ app.addEventListener("inventory-changed", () => {
 footer.append(footerInventory);
 loadInventory();
 
-initializeGrid(HOME);
+resetGrid(HOME);

@@ -1,9 +1,5 @@
 import leaflet from "leaflet";
-//linter being finnicky
-export interface Cell {
-  readonly i: number;
-  readonly j: number;
-}
+import { Cell } from "./interfaces.ts";
 
 function ManhattanDistance(cellA: Cell, cellB: Cell): number {
   return Math.abs(cellA.i - cellB.i) + Math.abs(cellA.j - cellB.j);
@@ -95,17 +91,19 @@ export class Board {
   }
 
   //Removes buttons not in cell list / Out of Range (OoR)
-  removeButtonsOoR(cellsInRange: Cell[]) {
+  removeButtonsOoR(cellsInRange: Cell[]): leaflet.Rectangle[] {
+    const buttonsToRemove : leaflet.Rectangle[] = [];
     const stringList: string[] = cellsInRange.map((cell: Cell) => {
       const { i, j } = cell;
       return [i, j].toString();
     });
     for (const myCell of Array.from(this.cellsToButtons.keys())) {
       if (stringList.indexOf(myCell) == -1) {
-        this.cellsToButtons.get(myCell).remove();
+        buttonsToRemove.push(this.cellsToButtons.get(myCell));
         this.cellsToButtons.delete(myCell);
       }
     }
+    return buttonsToRemove;
   }
 
   saveCache(cell: Cell, cacheData: string) {
