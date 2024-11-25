@@ -33,7 +33,7 @@ const CHANCE_PER_CELL = 0.1;
 const InventoryChangeEvent = new Event("inventory-changed");
 const PlayerMovedEvent = new Event("player-moved");
 
-const mapManager = new MapManager(mapElem, HOME, ZOOM, TILE_DEGREES);
+const mapManager = new MapManager(mapElem, HOME, ZOOM);
 
 document.title = APP_NAME;
 title.innerHTML = APP_NAME;

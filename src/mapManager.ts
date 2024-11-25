@@ -10,17 +10,15 @@ export class MapManager {
     private map: Map;
     public homeCoords: LatLng;
     public zoom: number;
-    public tileDeg: number;
     private playerMarker: Marker | null;
     private playerPolyline: Polyline | null;
     private stateDependentGroup : LayerGroup;
     private homeMarker: Marker | null;
     private panmode : Panmode;
 
-    constructor(mapElement: HTMLElement, home: LatLng, zoom: number, tileDeg: number) {
+    constructor(mapElement: HTMLElement, home: LatLng, zoom: number) {
         this.homeCoords = home;
         this.zoom = zoom;
-        this.tileDeg = tileDeg;
         this.map = leaflet.map(mapElement, {
             center: home,
             zoom: zoom,
